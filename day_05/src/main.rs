@@ -62,8 +62,7 @@ fn naive_solution(valid_indices: &Vec<(i64, i64)>) -> i64{
 
 fn complicated_solution(valid_indices: &Vec<(i64, i64)>) -> i64 {
     let mut counter = 0i64;
-    let mut prev_start = valid_indices[0].0;
-    let mut prev_end = valid_indices[0].1;
+    let (mut prev_start, mut prev_end) = (valid_indices[0].0, valid_indices[0].1);
 
     for slice in valid_indices {
         let (new_start, new_end) = *slice;
@@ -77,14 +76,13 @@ fn complicated_solution(valid_indices: &Vec<(i64, i64)>) -> i64 {
             continue;
         }
         
-        println!("Merging slice: ({}, {}) and ({}, {})", prev_start, prev_end, new_start, new_end);
+        // println!("Merging slice: ({}, {}) and ({}, {})", prev_start, prev_end, new_start, new_end);
         prev_start = cmp::min(prev_start, new_start);
         prev_end = cmp::max(prev_end, new_end);
     }
     println!("Distinct slice: ({}, {}) --> {}", prev_start, prev_end, (prev_end - prev_start) + 1);
     counter += (prev_end - prev_start) + 1;
     counter
-
 }
 
 fn main() {
