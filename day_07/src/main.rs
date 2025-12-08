@@ -48,26 +48,26 @@ fn part2() {
             }
         }
 
-        println!("");
-        println!("--- Layer {}", layer_i);
-        for &i in cur_laser.iter() {
-            print!("{}", i);
-        }
-        println!("");
-        for &i in splitter.iter() {
-            if i {
-                print!("^");
-            }
-            else {
-                print!(".");
-            }
-        }
-        println!("");
+        // println!("");
+        // println!("--- Layer {}", layer_i);
+        // for &i in cur_laser.iter() {
+        //     print!("{}", i);
+        // }
+        // println!("");
+        // for &i in splitter.iter() {
+        //     if i {
+        //         print!("^");
+        //     }
+        //     else {
+        //         print!(".");
+        //     }
+        // }
+        // println!("");
 
-        for &i in new_laser.iter() {
-            print!("{}", i);
-        }
-        println!("");
+        // for &i in new_laser.iter() {
+        //     print!("{}", i);
+        // }
+        // println!("");
 
 
         cur_laser = new_laser;
