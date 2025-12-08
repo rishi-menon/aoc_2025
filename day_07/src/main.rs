@@ -8,6 +8,7 @@ fn part2() {
     // let file_name = "input_simple.txt";
     let file_name = "input_full.txt";
 
+    // String parsing
     let lines: Vec<String> = fs::read_to_string(file_name).unwrap().lines().map(|s| String::from(s)).collect();
     // println!("{:?}", lines);
     let (first, rest) = lines.split_first().unwrap();
@@ -31,6 +32,7 @@ fn part2() {
         res
     }).collect::<Vec<Vec<bool>>>();
 
+    // String parsing over
     let mut cur_laser = laser;
     for (layer_i, splitter) in grid.iter().enumerate() {
         let mut new_laser = vec![0i64; cur_laser.len()];
@@ -75,6 +77,8 @@ fn part2() {
 
     // println!("");
     // println!("{:?}", cur_laser);
+
+    // Equivalent to: total_timelines = sum(cur_laser)
     let total_timelines = cur_laser.into_iter().reduce(|acc, ele| acc + ele).unwrap();
     println!("total_timelines: {}", total_timelines);
 
