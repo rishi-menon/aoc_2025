@@ -73,9 +73,8 @@ fn part2() {
         cur_laser = new_laser;
     }
 
-    println!("");
-
-    println!("{:?}", cur_laser);
+    // println!("");
+    // println!("{:?}", cur_laser);
     let total_timelines = cur_laser.into_iter().reduce(|acc, ele| acc + ele).unwrap();
     println!("total_timelines: {}", total_timelines);
 
