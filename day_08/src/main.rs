@@ -4,7 +4,8 @@ use itertools::Itertools;
 use colored::*;
 
 fn main() {
-    part1();
+    // part1();
+    part2();
 }
 
 #[derive(Debug)]
@@ -141,4 +142,55 @@ fn part1() {
     lengths.sort_by(|a, b| b.cmp(a));
     assert!(lengths.len() >= 3);
     println!("lengths: {:?}", lengths[0] * lengths[1] * lengths[2]);
+}
+
+fn part2() {
+    println!("Hello, world!");
+
+    // let file_path = "input_simple.txt";
+    let file_path = "input_full.txt";
+    let points = fs::read_to_string(file_path).unwrap().lines().map(|line| {
+        let tup = line.split(",").map(|word| word.parse::<i64>().unwrap()).collect_tuple::<(i64, i64, i64)>().unwrap();
+        Point(tup.0, tup.1, tup.2)
+    }).collect::<Vec<Point>>();
+
+    // println!("points: {:?}", points);
+
+    let mut distances = Vec::new();
+    for i in 0..(points.len() - 1) {
+        for j in (i+1)..points.len() {
+            let distance = calc_dist(&points[i], &points[j]);
+            distances.push((distance, i, j));
+        }
+    }
+
+    // Sort by distances ascending order
+    distances.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut disjoint_sets = DisjointSets::new(points.len());
+
+    println!("");
+    let mut final_nodes = None;
+    for (distance, index_a, index_b) in distances {
+        println!("Points {} and {}", index_a.to_string().yellow(), index_b.to_string().yellow());
+        disjoint_sets.merge_set(index_a, index_b);
+        if disjoint_sets.get_distinct_sets().len() == 1 {
+            final_nodes = Some((index_a, index_b));
+            break
+        }
+        println!("")
+    }
+
+    let (final_index_1, final_index_2) = final_nodes.expect("Could not form a single loop");
+
+    let circuits = disjoint_sets.get_distinct_sets();
+    
+    println!("----- Final sets");
+    for c in circuits {
+        println!("  - {:?} --> {}", c, c.len());
+    }
+
+    println!("");
+    println!("Final points: {:?} and {:?}", points[final_index_1], points[final_index_2]);
+    println!("Final value: {}", points[final_index_1].0 * points[final_index_2].0);
 }
