@@ -4,16 +4,75 @@ use colored::Colorize;
 use itertools::{Itertools, MinMaxResult};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Point(i64, i64);
+struct Point {
+    x: i64,
+    y: i64
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Edge(Point, Point);
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-struct Shape(Vec<Edge>, Vec<Point>);
+impl Edge {
+    fn intersect(&self, other_edge: &Edge) -> bool {
+        let (a, b) = (self.0, self.1);
+        let (c, d) = (other_edge.0, other_edge.1);
 
-impl From<Vec<Edge>> for Shape {
-    fn from(edges: Vec<Edge>) -> Self { 
-        let points = edges.iter().map(|edge| edge.0).collect::<Vec<Point>>();
-        Self(edges, points)
+        let (d1x, d1y) = (b.x-a.x, b.y-a.y);
+        let (d2x, d2y) = (d.x-c.x, d.y-c.y);
+
+        let denominator = -d1x * d2y + d1y*d2x;
+        // println!("---");
+        // println!("A: ({}, {}), B: ({}, {}), C: ({}, {}), D: ({}, {})", a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y);
+        // println!("d1: ({}, {}), d2: ({}, {})", d1x, d1y, d2x, d2y);
+        // println!("denominator: {}", denominator);
+        if denominator == 0 {
+            // Parallel lines could technically intersect
+            let (t1, t2) = if d1x == 0 && d2x == 0 {
+                if a.x != c.x {
+                    return false;
+                }
+
+                let t1 = (c.y - a.y) as f32 / d1y as f32;
+                let t2 = (d.y - a.y) as f32 / d1y as f32;
+                (t1, t2)
+            }
+            else if d1y == 0 && d2y == 0 {
+                if a.y != c.y {
+                    return false;
+                }
+                let t1 = (c.x - a.x) as f32 / d1x as f32;
+                let t2 = (d.x - a.x) as f32 / d1x as f32;
+                (t1, t2)
+            }
+            else {
+                panic!("Invalid assertion");
+            };
+
+            // println!("t1: {}, t2: {}", t1, t2);
+            return (0.0 <= t1 && t1 <= 1.0) || (0.0 <= t2 && t2 <= 1.0); 
+        }
+
+        let (e, f) = (c.x - a.x, c.y - a.y);
+
+        let t1 = (-d2y * e + d2x * f) as f32 / (denominator as f32);
+        let t2 = (-d1y * e + d1x * f) as f32 / (denominator as f32);
+        // println!("t1: {}, t2: {}", t1, t2);
+
+        0.0 <= t1 && t1 <= 1.0 && 0.0 <= t2 && t2 <= 1.0
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct Shape {
+    edges: Vec<Edge>,
+    points: Vec<Point>,
+}
+
+
+impl From<Vec<Point>> for Shape {
+    fn from(points: Vec<Point>) -> Self { 
+        // let points = edges.iter().map(|edge| edge.0).collect::<Vec<Point>>();
+        let edges = (0..points.len()).map(|i| Edge(points[i], points[(i+1) % points.len()])).collect::<Vec<Edge>>();
+        Self{edges, points}
     }
 }
 
@@ -35,33 +94,184 @@ impl Shape {
     //         min <= proj && proj <= max
     //     }).all(convert::identity)
     // }
-    fn contains(&self, point: Point) -> bool {
-        false
+
+    fn valid_square(&self, point_a: Point, point_b: Point) -> bool {
+        let (min_y, max_y) = (cmp::min(point_a.y, point_b.y), cmp::max(point_a.y, point_b.y));
+        for edge in self.edges.iter() {
+            for row in min_y..max_y+1 {
+                let cur_edge = Edge(
+                    Point{x:point_a.x, y:row},
+                    Point{x:point_b.x, y:row},
+                );
+
+                if cur_edge.intersect(edge) {
+                    return false
+                }
+            }
+        }
+        true
+    }
+    fn largest_square(&self) -> i64 {
+        let num_points = self.points.len();
+        let num_edges = self.points.len();
+
+        for i in 0..num_points-1 {
+            for j in i+1..num_points {
+                if self.valid_square(self.points[i], self.points[j]) {
+                    print_rect(self, self.points[i], self.points[j]);
+                }
+            }
+        }       
+        0i64
     }
 }
 
-// fn print_board(points: &Vec<Point>) {
-//     // Print grid
-//     let cols = points.iter().map(|x| x.0).max().unwrap() + 1;
-//     let rows = points.iter().map(|x| x.1).max().unwrap() + 1;
+fn print_edges(edge_1: &Edge, edge_2: &Edge) {
+    // Print grid
+    let cols = cmp::max(cmp::max(edge_1.0.x, edge_1.1.x), cmp::max(edge_2.0.x, edge_2.1.x)) + 2;
+    let rows = cmp::max(cmp::max(edge_1.0.y, edge_1.1.y), cmp::max(edge_2.0.y, edge_2.1.y)) + 2;
 
-//     for i in 0..rows+1 {
-//         if i == 0 {
+    println!("rows: {}, cols: {}", rows, cols);
+    let mut grid = vec![vec![0; cols as usize]; rows as usize];
+    
+    let (a, b) = (edge_1.0, edge_1.1);
+    if a.x == b.x {
+        let (min, max) = (cmp::min(a.y, b.y), cmp::max(a.y, b.y));
+        for row in min..max+1 {
+            grid[row as usize][a.x as usize] = 2;
+        }
+    }
+    else if a.y == b.y {
+        let (min, max) = (cmp::min(a.x, b.x), cmp::max(a.x, b.x));
+        for col in min..max+1 {
+            grid[a.y as usize][col as usize] = 2;
+        }
+    }
+    else {
+        assert!(false, "Impossible case");
+    }
+    
+    let (a, b) = (edge_2.0, edge_2.1);
+    if a.x == b.x {
+        let (min, max) = (cmp::min(a.y, b.y), cmp::max(a.y, b.y));
+        for row in min..max+1 {
+            grid[row as usize][a.x as usize] = 2;
+        }
+    }
+    else if a.y == b.y {
+        let (min, max) = (cmp::min(a.x, b.x), cmp::max(a.x, b.x));
+        for col in min..max+1 {
+            grid[a.y as usize][col as usize] = 2;
+        }
+    }
+    else {
+        assert!(false, "Impossible case");
+    }
+
+    grid[edge_1.0.y as usize][edge_1.0.x as usize] = 1;
+    grid[edge_1.1.y as usize][edge_1.1.x as usize] = 1;
+    grid[edge_2.0.y as usize][edge_2.0.x as usize] = 1;
+    grid[edge_2.1.y as usize][edge_2.1.x as usize] = 1;
+
+    for row in 0..rows {
+        if row == 0 {
+            print!("  ");
+            for col in 0..cols {
+                print!("{}", (col % 10).to_string().green());
+            }
+            println!("");
+        }
+        
+        for col in 0..cols {
+            if col == 0 {
+                print!("{} ", (row % 10).to_string().green());
+            }
+            
+            match grid[row as usize][col as usize] {
+                0 => print!("."),
+                1 => print!("{}", "#".red()),
+                2 => print!("{}", "*".yellow()),
+                t => panic!("Unexpected grid value: {t}"),
+            };
+        }
+        println!("");
+        
+    }
+
+
+}   
+fn print_rect(shape: &Shape, point_a: Point, point_b: Point) {
+    // Print grid
+    let cols = shape.points.iter().map(|point| point.x).max().unwrap() + 1;
+    let rows = shape.points.iter().map(|point| point.y).max().unwrap() + 1;
+
+    println!("rows: {}, cols: {}", rows, cols);
+    let mut grid = vec![vec![0; cols as usize]; rows as usize];
+    
+    let (min_x, max_x) = (cmp::min(point_a.x, point_b.x), cmp::max(point_a.x, point_b.x));
+    let (min_y, max_y) = (cmp::min(point_a.y, point_b.y), cmp::max(point_a.y, point_b.y));
+    
+    for row in min_y..max_y+1 {
+        for col in min_x..max_x+1 {
+            grid[row as usize][col as usize] = 2;
+        }
+    }
+    for point in shape.points.iter() {
+        grid[point.y as usize][point.x as usize] = 1;
+    }
+
+    for row in 0..rows {
+        if row == 0 {
+            print!("  ");
+            for col in 0..cols {
+                print!("{}", (col % 10).to_string().green());
+            }
+            println!("");
+        }
+        
+        for col in 0..cols {
+            if col == 0 {
+                print!("{} ", (row % 10).to_string().green());
+            }
+            
+            match grid[row as usize][col as usize] {
+                0 => print!("."),
+                1 => print!("{}", "#".red()),
+                2 => print!("{}", "*".yellow()),
+                t => panic!("Unexpected grid value: {t}"),
+            };
+        }
+        println!("");
+        
+    }
+
+
+}   
+// fn print_shape(shape: &Shape) {
+//     // Print grid
+//     let cols = shape.points.iter().map(|point| point.x).max().unwrap() + 1;
+//     let rows = shape.points.iter().map(|point| point.y).max().unwrap() + 1;
+
+//     for row in 0..rows+1 {
+//         if row == 0 {
 //             print!("  ");
-//             for j in 0..cols+1 {
-//                 print!("{}", (j % 10).to_string().green());
+//             for col in 0..cols+1 {
+//                 print!("{}", (col % 10).to_string().green());
 //             }
 //             println!("");
 //         }
         
-//         for j in 0..cols+1 {
-//             if j == 0 {
-//                 print!("{} ", (i % 10).to_string().green());
+//         for col in 0..cols+1 {
+//             if col == 0 {
+//                 print!("{} ", (row % 10).to_string().green());
 //             }
 
-//             let cur_point = Point(i, j);
-//             if points.contains(&cur_point) {
+//             let cur_point = Point{x:col, y:row};
+//             if shape.points.contains(&cur_point) {
 //                 print!("{}", "#".red());
+//             }
+//             else if shape.contains(cur_point) {
+//                 print!("{}", "*".yellow());
 //             } else {
 //                 print!("{}", ".");
 //             }
@@ -71,88 +281,14 @@ impl Shape {
 //     }
 // }
 
-fn print_shape(shape: &Shape, points: &Vec<Point>) {
-    // Print grid
-    let cols = points.iter().map(|x| x.0).max().unwrap() + 1;
-    let rows = points.iter().map(|x| x.1).max().unwrap() + 1;
-
-    for row in 0..rows+1 {
-        if row == 0 {
-            print!("  ");
-            for col in 0..cols+1 {
-                print!("{}", (col % 10).to_string().green());
-            }
-            println!("");
-        }
-        
-        for col in 0..cols+1 {
-            if col == 0 {
-                print!("{} ", (row % 10).to_string().green());
-            }
-
-            let cur_point = Point(col, row);
-            if points.contains(&cur_point) {
-                print!("{}", "#".red());
-            }
-            else if shape.contains(cur_point) {
-                print!("{}", "*".yellow());
-            } else {
-                print!("{}", ".");
-            }
-        }
-        println!("");
-        
-    }
-}
-
-fn print_board_with_square(points: &Vec<Point>, point_a: Point, point_b: Point) {
-    // Print grid
-    let cols = points.iter().map(|x| x.0).max().unwrap() + 1;
-    let rows = points.iter().map(|x| x.1).max().unwrap() + 1;
-
-    let slice_cols = (cmp::min(point_a.0, point_b.0), cmp::max(point_a.0, point_b.0));
-    let slice_rows = (cmp::min(point_a.1, point_b.1), cmp::max(point_a.1, point_b.1));
-
-    for row in 0..rows+1 {
-        if row == 0 {
-            print!("  ");
-            for col in 0..cols+1 {
-                print!("{}", (col % 10).to_string().green());
-            }
-            println!("");
-        }
-        
-        for col in 0..cols+1 {
-            if col == 0 {
-                print!("{} ", (row % 10).to_string().green());
-            }
-
-            let cur_point = Point(col, row);
-            if points.contains(&cur_point) {
-                print!("{}", "#".red());
-            }
-            else if slice_cols.0 <= cur_point.0 && cur_point.0 <= slice_cols.1 && slice_rows.0 <= cur_point.1 && cur_point.1 <= slice_rows.1 {
-                print!("{}", "#".yellow());
-            } else {
-                print!("{}", ".");
-            }
-        }
-        println!("");
-        
-    }
-    println!("Area: {}", calculate_area(point_a, point_b));
-    println!("");
-}
-
 fn main() {
     // part1_naive();
-    // part1_actual();
     part2_naive();
 }
 
 fn calculate_area(point_a: Point, point_b: Point) -> i64 {
-    let dx = (point_a.0 - point_b.0).abs();
-    let dy = (point_a.1 - point_b.1).abs();
+    let dx = (point_a.x - point_b.x).abs();
+    let dy = (point_a.y - point_b.y).abs();
     (dx + 1) * (dy + 1)
 }
 
@@ -164,7 +300,7 @@ fn part1_naive() {
     let file_path = "input_full.txt";
     let points = fs::read_to_string(file_path).expect("File does not exist").lines().map(|line| {
         let nums: (i64, i64) = line.split(",").map(|word| word.parse::<i64>().expect("Could not parse number")).collect_tuple().expect("Expected tuple");
-        Point(nums.0, nums.1)
+        Point{x: nums.0, y:nums.1}
     }).collect::<Vec<Point>>();
 
     let mut max_area = 0i64;
@@ -183,21 +319,6 @@ fn part1_naive() {
 }
 
 
-fn part1_actual() {
-    println!("----- Actual solution -----");
-
-    // String parsing
-    // let file_path = "input_simple.txt";
-    let file_path = "input_full.txt";
-    let mut points = fs::read_to_string(file_path).expect("File does not exist").lines().map(|line| {
-        let nums: (i64, i64) = line.split(",").map(|word| word.parse::<i64>().expect("Could not parse number")).collect_tuple().expect("Expected tuple");
-        Point(nums.0, nums.1)
-    }).collect::<HashSet<Point>>();
-
-    let point_a = *points.iter().max_by_key(|&point| point.0).unwrap();
-    let point_b = *points.iter().max_by_key(|&point| point.1).unwrap();
-}
-
 fn part2_naive() {
     println!("----- Part 2 niave solution -----");
 
@@ -206,25 +327,25 @@ fn part2_naive() {
     // let file_path = "input_full.txt";
     let points = fs::read_to_string(file_path).expect("File does not exist").lines().map(|line| {
         let nums: (i64, i64) = line.split(",").map(|word| word.parse::<i64>().expect("Could not parse number")).collect_tuple().expect("Expected tuple");
-        Point(nums.0, nums.1)
+        Point{x: nums.0, y:nums.1}
     }).collect::<Vec<Point>>();
 
-    let shape: Shape = (0..points.len()).map(|i| Edge(points[i], points[(i+1) % points.len()])).collect::<Vec<Edge>>().into();
+    let shape: Shape = points.into();
+    let max_area = shape.largest_square();
+    println!("Largest area: {}", max_area);
+    // println!("{:?}", shape.points);
+    // // print_shape(&shape);
 
-    println!("{:?}", points);
-    print_shape(&shape, &points);
-    // print_board(&points);
-
-    // let mut max_area = 0i64;
-    // for i in 0..points.len()-1 {
-    //     for j in (i+1)..points.len() {
-    //         let area = calculate_area(points[i], points[j]);
-
-    //         if max_area < area {
-    //             max_area = area;
-    //             print_board_with_square(&points, points[i], points[j]);
-    //         }
-    //     }
-    // }
+    // let edge_1 = Edge (
+    //     Point { x: 1, y: 0 },
+    //     Point { x: 1, y: 5 },
+    // );
+    // let edge_2 = Edge (
+    //     Point { x: 10, y: 0 },
+    //     Point { x: 1, y: 0 },
+    // );
+    // print_edges(&edge_1, &edge_2);
+    
+    // println!("Intersect: {}", edge_1.intersect(&edge_2));
 
 }
