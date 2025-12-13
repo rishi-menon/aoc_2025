@@ -1,7 +1,7 @@
-use std::{cmp, hash, collections::HashSet, fs, hash::Hash, convert};
+use std::{cmp, fs, hash::Hash};
 
 use colored::Colorize;
-use itertools::{Itertools, MinMaxResult};
+use itertools::{Itertools};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Point {
@@ -11,8 +11,18 @@ struct Point {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Edge(Point, Point);
+
+enum IntersectEnum {
+    None,
+    Grazing(i64), // winding num
+    Full,
+}
+
 impl Edge {
-    fn intersect(&self, other_edge: &Edge) -> bool {
+    fn intersect(&self, other_edge: &Edge) -> IntersectEnum {
+        // returns True when the intersection was not grazing
+        // returns winding number
+
         let (a, b) = (self.0, self.1);
         let (c, d) = (other_edge.0, other_edge.1);
 
@@ -28,7 +38,7 @@ impl Edge {
             // Parallel lines could technically intersect
             let (t1, t2) = if d1x == 0 && d2x == 0 {
                 if a.x != c.x {
-                    return false;
+                    return IntersectEnum::None;
                 }
 
                 let t1 = (c.y - a.y) as f32 / d1y as f32;
@@ -37,7 +47,7 @@ impl Edge {
             }
             else if d1y == 0 && d2y == 0 {
                 if a.y != c.y {
-                    return false;
+                    return IntersectEnum::None;
                 }
                 let t1 = (c.x - a.x) as f32 / d1x as f32;
                 let t2 = (d.x - a.x) as f32 / d1x as f32;
@@ -48,7 +58,16 @@ impl Edge {
             };
 
             // println!("t1: {}, t2: {}", t1, t2);
-            return (0.0 <= t1 && t1 <= 1.0) || (0.0 <= t2 && t2 <= 1.0); 
+            if (0.0 < t1 && t1 < 1.0) || (0.0 < t2 && t2 < 1.0) {
+                return IntersectEnum::Full;
+            }
+            if (0.0 <= t1 && t1 <= 1.0) || (0.0 <= t2 && t2 <= 1.0) {
+                // 0 since the rays are parallel
+                return IntersectEnum::Grazing(0);
+            }
+            else {
+                return IntersectEnum::None;
+            }
         }
 
         let (e, f) = (c.x - a.x, c.y - a.y);
@@ -57,7 +76,25 @@ impl Edge {
         let t2 = (-d1y * e + d1x * f) as f32 / (denominator as f32);
         // println!("t1: {}, t2: {}", t1, t2);
 
-        0.0 <= t1 && t1 <= 1.0 && 0.0 <= t2 && t2 <= 1.0
+        if 0.0 < t1 && t1 < 1.0 && 0.0 < t2 && t2 < 1.0 {
+            return IntersectEnum::Full;
+        }
+        else if 0.0 <= t1 && t1 <= 1.0 && 0.0 <= t2 && t2 <= 1.0 {
+            // rays are not parallel
+            let winding_num = if d1x == 0 && d2y == 0 {
+                d2y.signum()
+            }
+            else if d1y == 0 && d2x == 0 {
+                d2x.signum()
+            }
+            else {
+                panic!("Invalid case");
+            };
+            return IntersectEnum::Grazing(winding_num);
+        }
+        else {
+            return IntersectEnum::None; 
+        }
     }
 }
 
@@ -95,34 +132,64 @@ impl Shape {
     //     }).all(convert::identity)
     // }
 
+    fn valid_row(&self, cur_edge: Edge) -> bool {
+        let mut winding_num = 0;
+        let mut has_winding_num = false;
+        for edge in self.edges.iter() {
+            match cur_edge.intersect(edge) {
+                IntersectEnum::None => { continue; }
+                IntersectEnum::Grazing(w) => { winding_num += w; has_winding_num = true; },
+                IntersectEnum::Full => {return false; }
+            }
+        }
+        // return winding_num != 0;
+        println!("Winding num: {winding_num}, has_winding_num: {has_winding_num}");
+        if has_winding_num {
+            return winding_num != 0;
+        }
+        else {
+            return true;
+        }
+    }
+
     fn valid_square(&self, point_a: Point, point_b: Point) -> bool {
         let (min_y, max_y) = (cmp::min(point_a.y, point_b.y), cmp::max(point_a.y, point_b.y));
-        for edge in self.edges.iter() {
-            for row in min_y..max_y+1 {
-                let cur_edge = Edge(
-                    Point{x:point_a.x, y:row},
-                    Point{x:point_b.x, y:row},
-                );
-
-                if cur_edge.intersect(edge) {
-                    return false
-                }
+        let (min_x, max_x) = (cmp::min(point_a.x, point_b.x), cmp::max(point_a.x, point_b.x));
+        for row in min_y..max_y+1 {
+            let cur_edge = Edge(
+                Point{x:point_a.x, y:row},
+                Point{x:point_b.x, y:row},
+            );
+            if !self.valid_row(cur_edge) {
+                return false;
             }
         }
         true
     }
     fn largest_square(&self) -> i64 {
         let num_points = self.points.len();
-        let num_edges = self.points.len();
-
+        
+        let mut max_area = 0i64;
         for i in 0..num_points-1 {
             for j in i+1..num_points {
+                println!("----- i: {}, j: {}", i, j);
+                print_rect(self, self.points[i], self.points[j]);
                 if self.valid_square(self.points[i], self.points[j]) {
-                    print_rect(self, self.points[i], self.points[j]);
+                    println!("{}", "Valid grid".green());
+                    
+                    let cur_area = calculate_area(self.points[i], self.points[j]);
+                    
+                    if max_area < cur_area || true {
+                        println!("cur_area: {cur_area}");
+                        max_area = cmp::max(cur_area, max_area);
+                    }
+                }
+                else {
+                    println!("{}", "Invalid grid".green());
                 }
             }
         }       
-        0i64
+        max_area
     }
 }
 
@@ -205,7 +272,7 @@ fn print_rect(shape: &Shape, point_a: Point, point_b: Point) {
     let cols = shape.points.iter().map(|point| point.x).max().unwrap() + 1;
     let rows = shape.points.iter().map(|point| point.y).max().unwrap() + 1;
 
-    println!("rows: {}, cols: {}", rows, cols);
+    // println!("rows: {}, cols: {}", rows, cols);
     let mut grid = vec![vec![0; cols as usize]; rows as usize];
     
     let (min_x, max_x) = (cmp::min(point_a.x, point_b.x), cmp::max(point_a.x, point_b.x));
@@ -217,7 +284,9 @@ fn print_rect(shape: &Shape, point_a: Point, point_b: Point) {
         }
     }
     for point in shape.points.iter() {
-        grid[point.y as usize][point.x as usize] = 1;
+        if grid[point.y as usize][point.x as usize] == 0 {
+            grid[point.y as usize][point.x as usize] = 1;
+        }
     }
 
     for row in 0..rows {
