@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::{collections::HashSet, fs, ops::Index};
 use std::ops::BitXor;
-use std::cmp::Ordering;
+use std::cmp::{self, Ordering};
+
+use colored::Colorize;
 
 fn main() {
     // part1();
@@ -128,57 +130,97 @@ struct MachineState {
     counter: [i32; COUNTERS],
 }
 
+impl Default for MachineState {
+    fn default() -> Self {
+        MachineState { counter: [0; COUNTERS] }
+    }
+}
 impl MachineState {
-    fn is_invalid(&self) -> bool {
-        return self.counter.iter().any(|&x| x < 0);
+    // fn is_invalid(&self) -> bool {
+    //     return self.counter.iter().any(|&x| x < 0);
+    // }
+
+    // fn combine_state(state: &MachineState, button: &MachineState) -> MachineState {
+    //     let mut new_counter = [0; COUNTERS];
+    //     for i in 0..COUNTERS {
+    //         new_counter[i] = state.counter[i] - button.counter[i];
+    //     }
+    //     MachineState { counter: new_counter }
+    // }
+
+    // fn get_cost(&self) -> i32 {
+    //     let mut cost = 0;
+    //     for i in self.counter {
+    //         cost += i;
+    //     }
+    //     cost
+    // }
+
+    fn is_invalid(&self, target: &MachineState) -> bool {
+        for i in 0..COUNTERS {
+            if self.counter[i] > target.counter[i] {
+                return true;
+            }
+        }
+        return false;
     }
 
     fn combine_state(state: &MachineState, button: &MachineState) -> MachineState {
         let mut new_counter = [0; COUNTERS];
         for i in 0..COUNTERS {
-            new_counter[i] = state.counter[i] - button.counter[i];
+            new_counter[i] = state.counter[i] + button.counter[i];
         }
         MachineState { counter: new_counter }
     }
-    fn get_cost(&self) -> i32 {
-        let mut cost = 0;
-        for i in self.counter {
-            cost += i;
+
+    fn calc_new_target(target: &MachineState, state: &MachineState) -> MachineState {
+        let mut new_target = [0; COUNTERS];
+        for i in 0..COUNTERS {
+            let diff = target.counter[i] - state.counter[i];
+            assert!(diff % 2 == 0);
+            new_target[i] = diff / 2;
         }
-        cost
+        MachineState { counter: new_target }
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct HeapItem {
-    num_steps: i32,
-    state: MachineState,
-}
-
-impl HeapItem {
-    fn new(num_steps: i32, state: MachineState) -> Self {
-        HeapItem {
-            num_steps,
-            state,
+    fn get_parity(&self) -> [bool; COUNTERS] {
+        let mut result = [false; COUNTERS];
+        for i in 0..COUNTERS {
+            result[i] = if self.counter[i] % 2 == 1 { true } else { false };
         }
+        result
     }
 }
 
-impl PartialOrd for HeapItem {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some( self.cmp(other) )
-    }
-}
-impl Ord for HeapItem {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // let cost_a = self.state.get_cost();
-        // let cost_b = other.state.get_cost();
-        // cost_b.cmp(&cost_a)
+// #[derive(Debug, PartialEq, Eq, Clone, Hash)]
+// struct HeapItem {
+//     num_steps: i32,
+//     state: MachineState,
+// }
+
+// impl HeapItem {
+//     fn new(num_steps: i32, state: MachineState) -> Self {
+//         HeapItem {
+//             num_steps,
+//             state,
+//         }
+//     }
+// }
+
+// impl PartialOrd for HeapItem {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         Some( self.cmp(other) )
+//     }
+// }
+// impl Ord for HeapItem {
+//     fn cmp(&self, other: &Self) -> Ordering {
+//         // let cost_a = self.state.get_cost();
+//         // let cost_b = other.state.get_cost();
+//         // cost_b.cmp(&cost_a)
         
-        // For breadth first search
-        other.num_steps.cmp(&self.num_steps)
-    }
-}
+//         // For breadth first search
+//         other.num_steps.cmp(&self.num_steps)
+//     }
+// }
 
 fn parse_file_2(file_path: &str) -> Vec<Machine2> {
     let machines = fs::read_to_string(file_path).unwrap()
@@ -241,14 +283,61 @@ fn parse_file_2(file_path: &str) -> Vec<Machine2> {
 }
 
 fn calc_joltage(machine: &Machine2) -> i32 {
-    map = HashMap::new();
-    calc_joltage_helper(machine, &mut map, &machine.joltage, 0);
+    let mut map = HashMap::new();
+    calc_joltage_helper(machine, &mut map, &machine.joltage).unwrap()
 }
-fn calc_joltage_helper(machine: &Machine2, map: &mut HashMap<MachineState, i32>, target: &MachineState, step: i32) -> Option<i32> {
+fn calc_joltage_helper(machine: &Machine2, map: &mut HashMap<MachineState, i32>, target: &MachineState) -> Option<i32> {
+    // println!("{}: {:?}", "------ target".red(), target.counter);
+    if target.counter.iter().all(|&x| x == 0) {
+        return Some(0);
+    }
 
-    
+    if let Some(&value) = map.get(target) {
+        return Some(value);
+    }
 
+    let num_buttons = machine.buttons.len();
+    assert!(num_buttons < 16);
+    // println!("num joltages: {}, num buttons: {}", machine.num_joltage, num_buttons);
 
+    let target_parity = target.get_parity();
+    let mut potential = Vec::new();
+    for i in 0..(1 << num_buttons) {
+        let mut state = MachineState::default();
+        let mut counter = 0;
+        for j in 0..num_buttons {
+            if i & (1 << j) != 0 {
+                state = MachineState::combine_state(&state, &machine.buttons[j]);
+                counter += 1;
+            }
+        }
+        
+        if target_parity != state.get_parity() || state.is_invalid(target) {
+            continue;
+        }
+
+        let new_target = MachineState::calc_new_target(target, &state);
+        // println!("new_target: {:?}, c: {}", new_target.counter, counter);
+        potential.push((counter, new_target));
+    }
+
+    let mut min_steps = i32::MAX;
+    for (s, new_target) in potential {
+        let recursive_steps = calc_joltage_helper(machine, map, &new_target);
+        if recursive_steps.is_none() {
+            continue;
+        }
+        // println!("s: {}, recursive: {:?}", s, recursive_steps.unwrap());
+        let new_steps = s + 2 * recursive_steps.unwrap();
+        min_steps = cmp::min(min_steps, new_steps);
+    }
+
+    if min_steps == i32::MAX {
+        return None
+    }
+
+    map.insert(target.clone(), min_steps);
+    return Some(min_steps);
 }
 // fn calc_joltage(machine: &Machine2) -> i32 {
 //     let mut priority_queue = BinaryHeap::new();
@@ -301,17 +390,17 @@ fn calc_joltage_helper(machine: &Machine2, map: &mut HashMap<MachineState, i32>,
 // }
 fn part2() {
     println!("Hello, world!");
-    let file_path = "input.txt";
-    // let file_path = "input_full.txt";
+    // let file_path = "input.txt";
+    let file_path = "input_full.txt";
     // let file_path = "input_simple.txt";
     let machines = parse_file_2(file_path);
 
     let mut result = 0;
-    for machine in machines.iter() {
+    for (i, machine) in machines.iter().enumerate() {
         let value = calc_joltage(machine);
         result += value;
 
-        println!("{:?} --> {}", machine, value);
+        println!("machine {:?} --> {}", i, value);
     }
 
     println!("Final result: {}", result);
